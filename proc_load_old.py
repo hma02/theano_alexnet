@@ -82,9 +82,6 @@ def crop_and_mirror(data, param_rand, flag_batch=True, cropsize=227):
 
 def fun_load(config, sock_data=5000):
 
-    RGB_cov_matrix = np.load('./RGB_Cov_matrix.npy')
-    Lambda, P = np.linalg.eigh(RGB_cov_matrix) # Lambda is an array of eigenvalues, P is an array of eigenvectors
-    
     send_queue = config['queue_l2t']
     recv_queue = config['queue_t2l']
     # recv_queue and send_queue are multiprocessing.Queue
@@ -119,21 +116,9 @@ def fun_load(config, sock_data=5000):
         hkl_name = recv_queue.get()
 
         # print hkl_name
-        data = hkl.load(hkl_name) - img_mean # c01b (3,256,256,batch_size)
-        
-        # RGB intensity regularization
-        for img_index in range(config['batch_size']):
-        
-            Alpha = np.random.normal(0, 0.01, 3)
+        data = hkl.load(hkl_name) - img_mean
+        # print 'load ', time.time() - bgn_time
 
-            Q = Lambda*Alpha # elementwise multiplication
-
-            Z = np.dot(P,Q)
-            data[0,:,:,img_index] += Z[0] 
-            data[1,:,:,img_index] += Z[1]
-            data[2,:,:,img_index] += Z[2]
-              
-        #print Z
         param_rand = recv_queue.get()
 
         data = crop_and_mirror(data, param_rand, flag_batch=flag_batch)
