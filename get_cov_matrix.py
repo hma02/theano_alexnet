@@ -65,25 +65,24 @@ if __name__ == '__main__':
 
     for hkl_name in train_filenames:
 
-        # print hkl_name
-	      print hkl_name
-        data = hkl.load(hkl_name).astype('int64') # c01b (3,256,256,batch_size)
-        
-        R=data[0,:,:,:].flatten()
-        G=data[1,:,:,:].flatten()
-        B=data[2,:,:,:].flatten()    
-  
-  		
-  	RR += np.dot(R,R)/div_const
-  	RG += np.dot(R,G)/div_const
-  	RB += np.dot(R,B)/div_const
-  	GG += np.dot(G,G)/div_const
-  	GB += np.dot(G,B)/div_const
-  	BB += np.dot(B,B)/div_const
-  
-  	R_mean += np.mean(R)
-  	G_mean += np.mean(G)
-  	B_mean += np.mean(B)
+	# print hkl_name
+	
+	data = hkl.load(hkl_name).astype('int64') # c01b (3,256,256,batch_size)
+	
+	R=data[0,:,:,:].flatten()
+	G=data[1,:,:,:].flatten()
+	B=data[2,:,:,:].flatten()    
+	
+	RR += np.dot(R,R)/div_const
+	RG += np.dot(R,G)/div_const
+	RB += np.dot(R,B)/div_const
+	GG += np.dot(G,G)/div_const
+	GB += np.dot(G,B)/div_const
+	BB += np.dot(B,B)/div_const
+	
+	R_mean += np.mean(R)
+	G_mean += np.mean(G)
+	B_mean += np.mean(B)
 
     
 
@@ -106,7 +105,7 @@ if __name__ == '__main__':
 #		    
 #   RGB_Cov =   		                sum(G*G)/N-gg	  sum(G*B)/N-gb
 #				
-#						                                        sum(B*B)/N-bb
+#						                  sum(B*B)/N-bb
 #
 #
     RGB_Cov = np.asarray([[RR,RG,RB],
