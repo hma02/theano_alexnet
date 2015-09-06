@@ -17,6 +17,7 @@ rand_crop: True # def: True
 shuffle: False # def: False, if shuffle the batches
 para_load: True
 batch_crop_mirror: False  # if False, do randomly on each image separately
+RGB_reg: True # if True, do RGB regularization during loading
 
 # Momentum
 use_momentum : True # def: True

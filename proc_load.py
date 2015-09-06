@@ -121,19 +121,19 @@ def fun_load(config, sock_data=5000):
         # print hkl_name
         data = hkl.load(hkl_name) - img_mean # c01b (3,256,256,batch_size)
         
-        # RGB intensity regularization
-        for img_index in range(config['batch_size']):
-        
-            Alpha = np.random.normal(0, 0.01, 3)
+        if config['RGB_reg']:
+            # RGB intensity regularization
+            for img_index in range(config['batch_size']):
+            
+                Alpha = np.random.normal(0, 0.01, 3)
+    
+                Q = Lambda*Alpha # elementwise multiplication
+    
+                Z = np.dot(P,Q)
+                data[0,:,:,img_index] += Z[0] 
+                data[1,:,:,img_index] += Z[1]
+                data[2,:,:,img_index] += Z[2]              
 
-            Q = Lambda*Alpha # elementwise multiplication
-
-            Z = np.dot(P,Q)
-            data[0,:,:,img_index] += Z[0] 
-            data[1,:,:,img_index] += Z[1]
-            data[2,:,:,img_index] += Z[2]
-              
-        #print Z
         param_rand = recv_queue.get()
 
         data = crop_and_mirror(data, param_rand, flag_batch=flag_batch)
