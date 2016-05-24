@@ -6,7 +6,7 @@ load_epoch: 20
 
 # Learning Parameters
 n_epochs: 60
-learning_rate: 0.04  # def:0.01
+learning_rate: 0.04  # def:0.01 0.04 for 4 GPU
 lr_policy: step  # def: step or auto
 lr_adapt_threshold: 0.01
 lr_step: [20, 40]  # def: 20, learning rate will be reduced by 10 times at these steps
@@ -32,7 +32,7 @@ mean_file: /work/mahe6562/prepdata_1000cat_128b/misc/img_mean.npy #/scratch/ilsv
 weights_dir: /work/mahe6562/models/  # directory for saving weights and results
 
 # conv library
-lib_conv: cudaconvnet  # or cudaconvnet
+lib_conv: cudnn  # or cudaconvnet
 
 snapshot_freq: 1  # frequency of saving weights
 print_train_error: True
