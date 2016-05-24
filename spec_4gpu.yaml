@@ -22,3 +22,4 @@ batch_size: 128 # def: 128
 # Directories
 train_folder: /work/mahe6562/prepdata_1000cat_128b/train_hkl_128b/ #/scratch/ilsvrc12/train_hkl_b256_b_128/
 val_folder: /work/mahe6562/prepdata_1000cat_128b/val_hkl_128b/ #/scratch/ilsvrc12/val_hkl_b256_b_128/
+

@@ -19,6 +19,7 @@ from train_funcs import (unpack_configs, adjust_learning_rate,
                          get_val_error_loss, get_rand3d, train_model_wrap,
                          proc_configs)
                          
+
 class Timer(object):
     def __init__(self):
         import time
@@ -277,7 +278,9 @@ def train_net(config, private_config):
     dtype_list = []
 
     for param in total_params:
+
         param_other = theano.shared(param.get_value(),borrow=False)
+
         param_ga = \
             theano.misc.pycuda_utils.to_gpuarray(param.container.value)
         param_ga_other = \
@@ -357,7 +360,7 @@ def train_net(config, private_config):
         4GPU exchange strategy ("copper")
         '''
         
-        
+
         '''
         Summing GPU Data
         Step 1
@@ -393,6 +396,7 @@ def train_net(config, private_config):
                                 param_ga_remote.size,
                                 ctx, ctx)
 
+
                 ctx.synchronize()
             vecadd_fun()
             
@@ -417,6 +421,7 @@ def train_net(config, private_config):
                                 ctx, ctx)
 
                 ctx.synchronize()
+
             vecadd_fun()
 
         elif rank==2:
@@ -437,6 +442,7 @@ def train_net(config, private_config):
         # gpu sync
         sync('after_ctx_sync_step2', config)
         
+
         '''
         Broadcasting Result
         Source GPU -> Destination GPU
@@ -456,6 +462,7 @@ def train_net(config, private_config):
                                 ctx, ctx)
 
                 ctx.synchronize()
+
             copy_fun()
 
         elif rank==3:
@@ -595,10 +602,12 @@ def train_net(config, private_config):
         
 
         if rank==0:
+
             print('epoch %i: validation loss %f ' %
                   (epoch, this_val_loss))
             print('epoch %i: validation error %f %%' %
                   (epoch, this_val_error * 100.))
+                  
             val_record.append([this_val_error, this_val_loss])
 
             if private_config['flag_save']:
