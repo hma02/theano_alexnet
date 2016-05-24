@@ -1,0 +1,24 @@
+# If want to input None, use !!null
+
+gpu0: 'gpu0'
+gpu1: 'gpu1'
+gpu2: 'gpu2'
+gpu3: 'gpu3'
+
+sock_data0: 5001
+sock_data1: 5002
+sock_data2: 5003
+sock_data3: 5004
+
+sock_gpu_01: 5501
+sock_gpu_02: 5502
+sock_gpu_03: 5503
+sock_gpu_21: 5521
+sock_gpu_23: 5523
+sock_gpu_13: 5513
+
+batch_size: 128 # def: 128
+
+# Directories
+train_folder: /work/mahe6562/prepdata_1000cat_128b/train_hkl_128b/ #/scratch/ilsvrc12/train_hkl_b256_b_128/
+val_folder: /work/mahe6562/prepdata_1000cat_128b/val_hkl_128b/ #/scratch/ilsvrc12/val_hkl_b256_b_128/
