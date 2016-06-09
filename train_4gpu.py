@@ -19,152 +19,9 @@ from train_funcs import (unpack_configs, adjust_learning_rate,
                          get_val_error_loss, get_rand3d, train_model_wrap,
                          proc_configs)
                          
-
-class Timer(object):
-    def __init__(self):
-        import time
-        self.start_time = None
-        self.time1 = None
-        self.time2 = None
-        self.time3 = None
-        self.train = []
-        self.comm = []
-        
-    def start(self):
-        self.start_time=time.time()
-        
-    def end(self, mode):
-        
-        duration = time.time()-self.start_time
-        
-        if mode=='train':
-            self.train.append(duration)
-        elif mode=='comm':
-            self.comm.append(duration)
-        else:
-            raise NotImplementedError
+from tools2 import Timer,queue_reduce,sync, prepare_1to3, prepare_copper, prepare_both
             
-    def result(self):
-        
-        train = sum(self.train)
-        comm = sum(self.comm)
-        
-        return (train, comm)
-    
-    def reset(self):
-        
-        self.train[:] = []
-        self.comm[:] = []
-
-def queue_reduce(value, config):
-    
-    'reduce value to rank0'
-    
-    reduced = None
-    rank = config['rank']
-    
-    if rank == 1:
-        config['queue_gpu_1to0'].put(value)
-        
-    if rank == 0:
-        
-        value_1 = config['queue_gpu_1to0'].get()
-        
-        sum_0 = value_1 + value
-        
-    if rank == 3:
-        
-        config['queue_gpu_3to2'].put(value)
-        
-    if rank == 2:
-        
-        value_3 = config['queue_gpu_3to2'].get()
-        
-        sum_2 = value_3 + value
-        
-    sync('reduce_step1', config)
-    
-    if rank==2:
-        
-        config['queue_gpu_2to0'].put(sum_2)
-        
-    if rank==0:
-        
-        sum_2 = config['queue_gpu_2to0'].get()
-        
-        reduced = sum_0 + sum_2
-    
-    
-    return reduced
-    
-def sync(message, config):
-    
-    rank = config['rank']
-    
-    if rank == 0:
-        config['queue_gpu_0to1'].put(message)
-        config['queue_gpu_0to2'].put(message)
-        assert config['queue_gpu_1to0'].get() == message
-        assert config['queue_gpu_2to0'].get() == message
-    elif rank == 1:
-        config['queue_gpu_1to0'].put(message)
-        assert config['queue_gpu_0to1'].get() == message
-    elif rank == 2:
-        config['queue_gpu_2to3'].put(message)
-        config['queue_gpu_2to0'].put(message)
-        assert config['queue_gpu_3to2'].get() == message
-        assert config['queue_gpu_0to2'].get() == message
-    elif rank == 3:
-        config['queue_gpu_3to2'].put(message)
-        assert config['queue_gpu_2to3'].get() == message
-
-def test_case(total_params, param_other_list, exchange_copper, config):
-    
-    rank = config['rank']
-    # test queue_reduce
-    values = [0,1,2,3]
-    sum_value = queue_reduce(values[rank],config)
-    print rank, sum_value
-
-    sync('test',config)
-
-    # test exchange_copper
-    for param, param_other in zip(total_params, param_other_list):
-    
-        arr = param.get_value()
-    
-        arr_0 = np.zeros(arr.shape, dtype=np.float32)
-        arr_1 = np.ones(arr.shape, dtype=np.float32)
-    
-        param.set_value(arr_1)
-        param_other.set_value(arr_0)
-    
-    # print before
-    if rank==0: print rank, total_params[0].get_value()[0][0][0][0],\
-                            param_other_list[0].get_value()[0][0][0][0]
-
-    if rank==0: print '============='
-
-    exchange_copper(rank=rank)
-    
-    # print after
-    for i in range(4):
-        
-        if rank == i:
-            print rank, total_params[0].get_value()[0][0][0][0],\
-                    param_other_list[0].get_value()[0][0][0][0]
-            print rank, total_params[2].get_value()[0][0][0][0],\
-                    param_other_list[2].get_value()[0][0][0][0]
-            
-            print rank, total_params[4].get_value()[0][0][0][0],\
-                    param_other_list[4].get_value()[0][0][0][0]
-            print rank, total_params[5].get_value()[0],\
-                    param_other_list[5].get_value()[0]
-                
-        sync('test',config)
-
-    exit(0)
-        
+                    
 def train_net(config, private_config):
 
     # UNPACK CONFIGS
@@ -179,15 +36,21 @@ def train_net(config, private_config):
     rank = int(private_config['gpu'][-1])%4
     config['rank'] = rank
     ranksize = 4
+    batch_size = config['batch_size']
     
     if config['batch_size'] == 128:
         train_filenames = train_filenames[rank::ranksize]
-        val_filenames = val_filenames[rank::ranksize]
-        train_labels = train_labels[rank::ranksize]
-        val_labels = val_labels[rank::ranksize]
+        #val_filenames = val_filenames[rank::ranksize]
         
-        # print rank, train_filenames[0:1], train_labels[0:1]
-        #
+        train_labels_tmp = []
+        
+        for i in range(rank,10008,ranksize):
+            train_labels_tmp.extend(train_labels[i*batch_size:(i+1)*batch_size])
+        train_labels = train_labels_tmp
+        #val_labels = val_labels[rank*batch_size:2502:ranksize*batch_size]
+        
+
+        # print rank, len(train_labels)
         # exit(0)
         
     elif config['batch_size'] == 64:
@@ -220,9 +83,9 @@ def train_net(config, private_config):
             sock_gpu = zmq.Context().socket(zmq.PAIR) 
             
             if rank==dest:
-                sock_gpu.connect('tcp://localhost:{0}'.format(socket_gpu))
+                sock_gpu.connect('tcp://localhost:{0}'.format(socket_gpu))  # client
             else:
-                sock_gpu.bind('tcp://*:{0}'.format(socket_gpu))
+                sock_gpu.bind('tcp://*:{0}'.format(socket_gpu)) # server
             
             sock_gpus.append(sock_gpu)
     
@@ -265,56 +128,22 @@ def train_net(config, private_config):
     (train_model, validate_model, train_error, learning_rate,
      shared_x, shared_y, rand_arr, vels) = compile_models(model, config)
 
-    total_params = model.params + vels
+    total_params = model.params #+ vels
+    print len(total_params)
     # total_params = model.params
 
     # initialize gpuarrays that points to the theano shared variable
     # pass parameters and other stuff
-    param_ga_list = []
-    param_other_list = []
-    param_ga_other_list = []
-    h_list = []
-    shape_list = []
-    dtype_list = []
-
-    for param in total_params:
-
-        param_other = theano.shared(param.get_value(),borrow=False)
-
-        param_ga = \
-            theano.misc.pycuda_utils.to_gpuarray(param.container.value)
-        param_ga_other = \
-            theano.misc.pycuda_utils.to_gpuarray(
-                param_other.container.value)
-        
-        param_other_list.append(param_other)
-        param_ga_list.append(param_ga)
-        param_ga_other_list.append(param_ga_other)
-        
-        h_list.append(drv.mem_get_ipc_handle(param_ga.ptr))
-        shape_list.append(param_ga.shape)
-        dtype_list.append(param_ga.dtype)
     
-    vecadd_fun = theano.function([], \
-                        updates=[(param, param + param_other) \
-                        for param, param_other in zip(total_params, param_other_list)])
-    division_factor = 1.0 / ranksize   
-    average_fun = theano.function([], \
-                        updates=[(param, param * division_factor) \
-                        for param in total_params])
-                        
-    copy_fun = theano.function([], \
-                        updates=[(param, param_other) \
-                        for param, param_other in zip(total_params, param_other_list)])
-                        
-
+    (param_ga_other_lists,h_list,shape_list,dtype_list,average_fun_test) \
+                            = prepare_1to3(total_params, theano, drv)
+    
     # pass shape, dtype and handles
 
     param_ga_remote_lists = []
     for sock_gpu in sock_gpus:
         sock_gpu.send_pyobj((shape_list, dtype_list, h_list))
         shape_other_list, dtype_other_list, h_other_list = sock_gpu.recv_pyobj()
-
     
     # for other_list in other_lists:      
     
@@ -328,6 +157,7 @@ def train_net(config, private_config):
             param_ga_remote_list.append(param_ga_remote)
             
         param_ga_remote_lists.append(param_ga_remote_list) # every remote in remote_list corresponds to a sock_gpu in sock_gpus
+        
     print "Information passed between 4 GPUs"
             
 
@@ -484,11 +314,127 @@ def train_net(config, private_config):
         sync('after_ctx_sync_step3', config)
         
         # do average
-        average_fun()
+        division_fun()
+    
+    def exchange_1to3():
+        
+        # exchanging weights
+        for param_ga_other_list, param_ga_remote_list in zip(param_ga_other_lists, param_ga_remote_lists):
+            for param_ga_other, param_ga_remote in zip(param_ga_other_list, param_ga_remote_list):
+  
+                drv.memcpy_peer(param_ga_other.ptr,
+                                param_ga_remote.ptr,
+                                param_ga_remote.dtype.itemsize *
+                                param_ga_remote.size,
+                                ctx, ctx)
+                ctx.synchronize()
+        
+        # gpu sync
+        sync('after_ctx_sync', config)
+        
+        average_fun_test()
+        
+    def test_case(total_params, param_other_list, exchange_copper, exchange_1to3, config):
+    
+        rank = config['rank']
+        # test queue_reduce
+        values = [0,1,2,3]
+        sum_value = queue_reduce(values[rank],config)
+        print rank, sum_value
+
+        sync('test',config)
+
+        # test exchange_copper
+        for param, param_other1, param_other2, param_other3 in \
+                    zip(total_params, param_other1_list,param_other2_list,param_other3_list):
+    
+            arr = param.get_value()
+    
+            arr_0 = np.zeros(arr.shape, dtype=np.float32)
+            arr_1 = np.ones(arr.shape, dtype=np.float32)*0.005
+    
+            param.set_value(arr_1)
+            param_other1.set_value(arr_0)
+            param_other2.set_value(arr_0)
+            param_other3.set_value(arr_0)
+    
+        # print before
+        if rank==0: print rank, param_test_list[21].get_value()[0], total_params[21].get_value()[0], \
+                                param_other1_list[21].get_value()[0], \
+                                param_other2_list[21].get_value()[0], \
+                                param_other3_list[21].get_value()[0]
+
+        sync('test',config)
+        if rank==0: print '============='
+        
+
+        exchange_1to3()
+    
+        # print after
+        for i in range(4):
+        
+            if rank == i:
+                print rank, param_test_list[21].get_value()[0], total_params[21].get_value()[0], \
+                                param_other1_list[21].get_value()[0], \
+                                param_other2_list[21].get_value()[0], \
+                                param_other3_list[21].get_value()[0]
+                        
+                # print rank, total_params[2].get_value()[0][0][0][0],\
+                #         param_other_list[2].get_value()[0][0][0][0]
+                #
+                # print rank, total_params[4].get_value()[0][0][0][0],\
+                #         param_other_list[4].get_value()[0][0][0][0]
+                # print rank, total_params[5].get_value()[0],\
+                #         param_other_list[5].get_value()[0]
+                
+            sync('test',config)
+        
+        if rank==0: print '============='
+        
+        
+        #####----------------------------------------------------------------------######
+        # test exchange_copper
+        for param, param_other in zip(total_params, param_other_list):
+    
+            arr = param.get_value()
+    
+            arr_0 = np.zeros(arr.shape, dtype=np.float32)
+            arr_1 = np.ones(arr.shape, dtype=np.float32)*0.005
+    
+            param.set_value(arr_1)
+            param_other.set_value(arr_0)
+            
+        # print before
+        if rank==0: print rank, total_params[21].get_value()[0],\
+                                param_other_list[21].get_value()[0]
+
+        sync('test',config)
+        if rank==0: print '============='
+        
+        exchange_copper(rank=rank)
+    
+        # print after
+        for i in range(4):
+        
+            if rank == i:
+                print rank, total_params[21].get_value()[0],\
+                        param_other_list[21].get_value()[0]
+                # print rank, total_params[2].get_value()[0][0][0][0],\
+                #         param_other_list[2].get_value()[0][0][0][0]
+                #
+                # print rank, total_params[4].get_value()[0][0][0][0],\
+                #         param_other_list[4].get_value()[0][0][0][0]
+                # print rank, total_params[5].get_value()[0],\
+                #         param_other_list[5].get_value()[0]
+                
+            sync('test',config)
+
+        exit(0)
     
     ####################################################
     
-    #test_case(total_params, param_other_list, exchange_copper, config)
+    #test_case(total_params, param_other_list, exchange_copper, exchange_1to3, config)
+    
     ####################################################
     
 
@@ -552,7 +498,16 @@ def train_net(config, private_config):
             # exchanging weights
             # timer.start()
             
-            exchange_copper(rank=rank)
+            exchange_1to3()
+            
+            #exchange_copper(rank=rank)
+
+            # test compare total_params and param_test_list
+
+            #print rank, (total_params[21].get_value() - param_test_list[21].get_value())[0]
+
+            #exit(0)
+            
             
             # timer.end('comm')
 
@@ -595,9 +550,9 @@ def train_net(config, private_config):
             batch_size, validate_model,
             send_queue=load_send_queue, recv_queue=load_recv_queue)
         
-        that_val_error = queue_reduce(value=this_val_error, config)
+        that_val_error = queue_reduce(value=this_val_error, config=config)
         
-        that_val_loss = queue_reduce(value=this_val_loss, config)
+        that_val_loss = queue_reduce(value=this_val_loss, config=config)
 
         
 
